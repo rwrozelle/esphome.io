@@ -1,0 +1,198 @@
+---
+title: "CoAP Server"
+description: "Instructions for setting up the CoAP server component to expose ESPHome entities over a Thread network."
+---
+
+import { Image } from 'astro:assets';
+import APIRef from '@components/APIRef.astro';
+
+The CoAP Server component exposes ESPHome entities (sensors, switches, binary sensors, buttons, text sensors, numbers,
+locks, and valves) as [CoAP](https://coap.technology/) resources over a [Thread](https://www.threadgroup.org) network.
+Clients can read entity states, subscribe to state changes via CoAP Observe (RFC 7641), and send commands.
+Payloads use [CBOR](https://cbor.io/) encoding (SenML format, RFC 8428) for compact representation.
+
+Optionally, [OSCORE](https://www.rfc-editor.org/rfc/rfc8613) (RFC 8613) security can be enabled to encrypt and
+authenticate CoAP messages.
+
+<Image src="/images/coap_server.png" alt="CoAP Server" layout="constrained" />
+
+> [!NOTE]
+> This component requires an ESP32 with an IEEE 802.15.4 radio (ESP32-C5, ESP32-C6, or ESP32-H2) and the
+> [OpenThread](/components/openthread/) component.
+
+```yaml
+# Minimal configuration
+coap_server:
+```
+
+## Configuration Variables
+
+- **id** (*Optional*, [ID](/guides/configuration-types#config-id)): Manually specify the ID used for code generation.
+- **port** (*Optional*, int): UDP port the CoAP server listens on. Defaults to `5683`.
+- **server_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server expects
+  clients to ping it. This value is sent to clients in the `/info` response so they know the expected ping frequency.
+  Minimum `20s`. Defaults to `60s`.
+- **server_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `server_ping_interval` to compute the
+  server-side timeout for a client ping. Range `0.5` to `5.0`. Defaults to `2.5`.
+- **server_ping_retry** (*Optional*, int): Number of ping retries before a client connection is considered timed out.
+  Range `1` to `5`. Defaults to `1`.
+- **client_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server sends
+  liveness pings to connected clients. Minimum `60s`. Defaults to `60s`.
+
+  > [!NOTE]
+  > When the [OpenThread](/components/openthread/) device type is `MTD` with a configured `poll_period`, both
+  > `server_ping_interval` and `client_ping_interval` must be greater than or equal to the `poll_period`.
+
+- **client_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `client_ping_interval` to compute the
+  timeout waiting for a client ping response. Range `0.5` to `5.0`. Defaults to `2.5`.
+- **client_ping_retry** (*Optional*, int): Number of ping retries before a client is considered disconnected.
+  Range `1` to `5`. Defaults to `1`.
+- **max_connections** (*Optional*, int): Maximum number of simultaneous active client connections tracked for CoAP
+  Observe. Range `1` to `5`. Defaults to `1`. Additional clients can still perform non-observe requests beyond this
+  limit.
+- **subscription_confirm** (*Optional*, boolean): Controls the type of CoAP Observe subscriptions accepted. When
+  `false`, only Non-Confirmable (NON) subscriptions are accepted. When `true`, only Confirmable (CON) subscriptions
+  are accepted. Defaults to `false`.
+- **on_client_connected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
+  establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger).
+- **on_client_disconnected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
+  connection is closed. See [`on_client_disconnected` Trigger](#on_client_disconnected-trigger).
+- **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except
+  `/.well-known/core` and `/info`) must include valid OSCORE credentials.
+
+  - **master_secret** (**Required**, hex string): OSCORE Master Secret (non-empty hex, e.g. `"0102030405060708090a0b0c0d0e0f10"`).
+  - **master_salt** (*Optional*, hex string): OSCORE Master Salt. Defaults to empty.
+  - **sender_id** (**Required**, hex string): OSCORE Sender ID (non-empty hex, must differ from `recipient_id`).
+  - **recipient_id** (**Required**, hex string): OSCORE Recipient ID (non-empty hex, must differ from `sender_id`).
+  - **id_context** (*Optional*, hex string): OSCORE ID Context. Defaults to empty.
+
+## Automation Triggers
+
+<span id="on_client_connected-trigger"></span>
+
+### `on_client_connected` Trigger
+
+Activated each time a client establishes a connection. The variable `client_address` (`std::string`) contains the
+IPv6 address of the connecting client.
+
+```yaml
+coap_server:
+  on_client_connected:
+    - logger.log:
+        format: "CoAP client connected: %s"
+        args: ["client_address.c_str()"]
+```
+
+<span id="on_client_disconnected-trigger"></span>
+
+### `on_client_disconnected` Trigger
+
+Activated each time a client connection is closed or timed out. The variable `client_address` (`std::string`)
+contains the IPv6 address of the disconnected client.
+
+```yaml
+coap_server:
+  on_client_disconnected:
+    - logger.log:
+        format: "CoAP client disconnected: %s"
+        args: ["client_address.c_str()"]
+```
+
+## CoAP Resources
+
+### Fixed Resources
+
+| Path | Methods | OSCORE-exempt | Description |
+|------|---------|---------------|-------------|
+| `/.well-known/core` | GET | Yes | Standard CoAP resource discovery (RFC 6690). Lists all entity resources. |
+| `/info` | GET | Yes | Device information: name, ESPHome version, build time, model, and ping parameters. |
+
+### Entity Resources
+
+Each entity is assigned a path of the form `/fp/{N}/g/1` where `N` is a sequential index starting at 1.
+Indices are assigned in the following entity-type order, with entities of each type indexed in declaration order:
+
+1. Binary sensors
+2. Buttons
+3. Locks
+4. Numbers
+5. Sensors
+6. Switches
+7. Text sensors
+8. Valves
+9. Logger (if the logger component is present)
+
+The methods and payload for each entity type:
+
+| Entity type | Path | Methods | Notes |
+|-------------|------|---------|-------|
+| Binary sensor | `/fp/{N}/g/1` | GET, OBSERVE | Read-only. Response: `{4: bool}` |
+| Button | `/fp/{N}/g/1` | POST | Write-only. POST to press (empty or any payload). |
+| Lock | `/fp/{N}/g/1` | GET, OBSERVE, POST | POST `{4: true}` to lock, `{4: false}` to unlock. |
+| Number | `/fp/{N}/g/1` | GET, OBSERVE, POST | POST `{2: float}` to set value. |
+| Sensor | `/fp/{N}/g/1` | GET, OBSERVE | Read-only. Response: `{2: float}` |
+| Switch | `/fp/{N}/g/1` | GET, OBSERVE, POST | POST `{4: true}` to turn on, `{4: false}` to turn off. |
+| Switch | `/fp/{N}/g/2` | POST | POST `{4: true}` to toggle. |
+| Text sensor | `/fp/{N}/g/1` | GET, OBSERVE | Read-only. Response: `{3: string}` |
+| Valve | `/fp/{N}/g/1` | GET, OBSERVE, POST | POST `{4: true}` to open, `{4: false}` to close. |
+| Valve | `/fp/{N}/g/2` | POST | POST `{4: true}` to stop. |
+| Logger | `/fp/{N}/g/1` | GET, OBSERVE | Read-only. Streams log entries as a CBOR array: `[millis, level, tag, message]`. |
+
+Payloads use [CBOR](https://cbor.io/) map encoding with SenML keys: `2` = numeric value (`v`), `3` = string value (`vs`),
+`4` = boolean value (`vb`).
+
+To subscribe to state changes, send a GET with the CoAP Observe option set to `0`. To cancel, send a GET with
+Observe set to `1`.
+
+## Examples
+
+### Basic CoAP Server with a Sensor and Switch
+
+```yaml
+openthread:
+  device_type: FTD
+
+coap_server:
+  port: 5683
+  max_connections: 2
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+
+switch:
+  - platform: gpio
+    pin: GPIOXX
+    name: "Relay"
+```
+
+### CoAP Server with OSCORE Security
+
+```yaml
+coap_server:
+  oscore:
+    master_secret: "0102030405060708090a0b0c0d0e0f10"
+    sender_id: "01"
+    recipient_id: "02"
+```
+
+### CoAP Server with Connection Logging
+
+```yaml
+coap_server:
+  max_connections: 3
+  on_client_connected:
+    - logger.log:
+        format: "Client connected: %s"
+        args: ["client_address.c_str()"]
+  on_client_disconnected:
+    - logger.log:
+        format: "Client disconnected: %s"
+        args: ["client_address.c_str()"]
+```
+
+## See Also
+
+- [OpenThread Component](/components/openthread/)
+- [OpenThread Info Text Sensor](/components/text_sensor/openthread_info/)
+- <APIRef text="coap_server.h" path="coap_server/coap_server.h" />

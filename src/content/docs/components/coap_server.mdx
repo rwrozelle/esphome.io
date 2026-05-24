@@ -55,7 +55,7 @@ coap_server:
   client's `/ping` resource to verify liveness. When `true`, only Confirmable (CON) subscriptions are accepted, and
   liveness is tracked via CON acknowledgements instead. Defaults to `false`.
 - **on_client_connected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
-  establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger).
+  establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger).  Client tracking is IP only, the port is not used for tracking.
 - **on_client_disconnected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
   connection is closed. See [`on_client_disconnected` Trigger](#on_client_disconnected-trigger).
 - **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except

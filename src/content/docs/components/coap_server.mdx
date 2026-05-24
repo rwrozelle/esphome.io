@@ -51,8 +51,9 @@ coap_server:
   Observe. Range `1` to `5`. Defaults to `1`. Additional clients can still perform non-observe requests beyond this
   limit.
 - **subscription_confirm** (*Optional*, boolean): Controls the type of CoAP Observe subscriptions accepted. When
-  `false`, only Non-Confirmable (NON) subscriptions are accepted. When `true`, only Confirmable (CON) subscriptions
-  are accepted. Defaults to `false`.
+  `false`, only Non-Confirmable (NON) subscriptions are accepted, and the server sends periodic GET requests to the
+  client's `/ping` resource to verify liveness. When `true`, only Confirmable (CON) subscriptions are accepted, and
+  liveness is tracked via CON acknowledgements instead. Defaults to `false`.
 - **on_client_connected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
   establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger).
 - **on_client_disconnected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
@@ -106,6 +107,7 @@ coap_server:
 |------|---------|---------------|-------------|
 | `/.well-known/core` | GET | Yes | Standard CoAP resource discovery (RFC 6690). Lists all entity resources. |
 | `/info` | GET | Yes | Device information: name, ESPHome version, build time, model, and ping parameters. |
+| `/ping` | GET | No | Liveness check. Returns `{2: uptime_seconds}` or `{2: -1}` on first contact after reboot. |
 
 ### Entity Resources
 

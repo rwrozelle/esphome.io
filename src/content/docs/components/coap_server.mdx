@@ -33,23 +33,23 @@ coap_server:
   clients to ping it. This value is sent to clients in the `/info` response so they know the expected ping frequency.
   Minimum `20s`. Defaults to `60s`.
 - **server_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `server_ping_interval` to compute the
-  server-side timeout for a client ping. Range `0.5` to `5.0`. Defaults to `2.5`.
+  server-side timeout for a client ping. Must be a positive value. Defaults to `2.5`.  Timeout value has a floor of 1 second.
 - **server_ping_retry** (*Optional*, int): Number of ping retries before a client connection is considered timed out.
   Range `1` to `5`. Defaults to `1`.
 - **client_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server sends
   liveness pings to connected clients. Minimum `60s`. Defaults to `60s`.
-
-  > [!NOTE]
-  > When the [OpenThread](/components/openthread/) device type is `MTD` with a configured `poll_period`, both
-  > `server_ping_interval` and `client_ping_interval` must be greater than or equal to the `poll_period`.
-
 - **client_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `client_ping_interval` to compute the
-  timeout waiting for a client ping response. Range `0.5` to `5.0`. Defaults to `2.5`.
+  timeout waiting for a client ping response. Must be a positive value. Defaults to `2.5`.  Timeout value has a floor of 1 second.
 - **client_ping_retry** (*Optional*, int): Number of ping retries before a client is considered disconnected.
   Range `1` to `5`. Defaults to `1`.
 - **max_connections** (*Optional*, int): Maximum number of simultaneous active client connections tracked for CoAP
   Observe. Range `1` to `5`. Defaults to `1`. Additional clients can still perform non-observe requests beyond this
   limit.
+  
+  > [!NOTE]
+  > When the [OpenThread](/components/openthread/) device type is `MTD` with a configured `poll_period`, both
+  > `server_ping_interval` and `client_ping_interval` must be greater than or equal to the `poll_period`.
+
 - **subscription_confirm** (*Optional*, boolean): Controls the type of CoAP Observe subscriptions accepted. When
   `false`, only Non-Confirmable (NON) subscriptions are accepted, and the server sends periodic GET requests to the
   client's `/ping` resource to verify liveness. When `true`, only Confirmable (CON) subscriptions are accepted, and

@@ -29,33 +29,52 @@ coap_server:
 
 - **id** (*Optional*, [ID](/guides/configuration-types#config-id)): Manually specify the ID used for code generation.
 - **port** (*Optional*, int): UDP port the CoAP server listens on. Defaults to `5683`.
+- **max_connections** (*Optional*, int): Maximum number of simultaneous active client connections tracked for CoAP
+  Observe. Range `1` to `5`. Defaults to `1`. Additional clients can still perform non-observe requests beyond this
+  limit.
+- **subscription_confirm** (*Optional*, boolean): Selects the CoAP Observe mode. When `false` (NON mode), clients
+  send Non-Confirmable observe requests and liveness is tracked via a mutual ping mechanism. When `true` (CON mode),
+  clients send Confirmable observe requests and liveness is tracked via CON acknowledgements. The two modes use
+  different configuration variables — ping options are only valid in NON mode, `observe_retry` is only valid in CON
+  mode. Defaults to `false`.
+
+### NON observe mode options (`subscription_confirm: false`)
+
+These options are only valid when `subscription_confirm` is `false`. Setting any of them when
+`subscription_confirm: true` is a configuration error.
+
 - **server_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server expects
   clients to ping it. This value is sent to clients in the `/info` response so they know the expected ping frequency.
   Minimum `20s`. Defaults to `60s`.
 - **server_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `server_ping_interval` to compute the
-  server-side timeout for a client ping. Must be a positive value. Defaults to `2.5`.  Timeout value has a floor of 1 second.
-- **server_ping_retry** (*Optional*, int): Number of ping retries before a client connection is considered timed out.
-  Range `1` to `5`. Defaults to `1`.
+  server-side timeout for a client ping. Must be a positive value. Timeout has a floor of 1 second. Defaults to `2.5`.
+- **server_ping_retry** (*Optional*, int): Number of consecutive missed pings before a client connection is considered
+  timed out. Range `1` to `5`. Defaults to `1`.
 - **client_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server sends
   liveness pings to connected clients. Minimum `60s`. Defaults to `60s`.
 - **client_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `client_ping_interval` to compute the
-  timeout waiting for a client ping response. Must be a positive value. Defaults to `2.5`.  Timeout value has a floor of 1 second.
-- **client_ping_retry** (*Optional*, int): Number of ping retries before a client is considered disconnected.
-  Range `1` to `5`. Defaults to `1`.
-- **max_connections** (*Optional*, int): Maximum number of simultaneous active client connections tracked for CoAP
-  Observe. Range `1` to `5`. Defaults to `1`. Additional clients can still perform non-observe requests beyond this
-  limit.
-  
-  > [!NOTE]
-  > When the [OpenThread](/components/openthread/) device type is `MTD` with a configured `poll_period`, both
-  > `server_ping_interval` and `client_ping_interval` must be greater than or equal to the `poll_period`.
+  timeout waiting for a client ping response. Must be a positive value. Timeout has a floor of 1 second. Defaults to `2.5`.
+- **client_ping_retry** (*Optional*, int): Number of consecutive missed pings before a client is considered
+  disconnected. Range `1` to `5`. Defaults to `1`.
 
-- **subscription_confirm** (*Optional*, boolean): Controls the type of CoAP Observe subscriptions accepted. When
-  `false`, only Non-Confirmable (NON) subscriptions are accepted, and the server sends periodic GET requests to the
-  client's `/ping` resource to verify liveness. When `true`, only Confirmable (CON) subscriptions are accepted, and
-  liveness is tracked via CON acknowledgements instead. Defaults to `false`.
+> [!NOTE]
+> When the [OpenThread](/components/openthread/) device type is `MTD` with a configured `poll_period`, both
+> `server_ping_interval` and `client_ping_interval` must be greater than or equal to the `poll_period`.
+
+### CON observe mode options (`subscription_confirm: true`)
+
+This option is only valid when `subscription_confirm` is `true`. Setting it when `subscription_confirm: false`
+is a configuration error.
+
+- **observe_retry** (*Optional*, int): Number of times a client should re-establish a broken observation before
+  marking the device unavailable. Retries use exponential backoff starting at 10 s, capping at 5 min. Set to `0`
+  to disable retry. Range `0` to `10`. Defaults to `1`.
+
+### Automation and security
+
 - **on_client_connected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
-  establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger).  Client tracking is IP only, the port is not used for tracking.
+  establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger). Client tracking is IP
+  only; the port is not used for tracking.
 - **on_client_disconnected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
   connection is closed. See [`on_client_disconnected` Trigger](#on_client_disconnected-trigger).
 - **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except
@@ -106,7 +125,7 @@ coap_server:
 | Path | Methods | OSCORE-exempt | Description |
 |------|---------|---------------|-------------|
 | `/.well-known/core` | GET | Yes | Standard CoAP resource discovery (RFC 6690). Lists all entity resources. |
-| `/info` | GET | Yes | Device information: name, ESPHome version, build time, model, and ping parameters. |
+| `/info` | GET | Yes | Device information: name, ESPHome version, build time, model, ping parameters, `subscription_confirm`, and `observe_retry`. |
 | `/ping` | GET | No | Liveness check. Returns `{2: uptime_seconds}` or `{2: -1}` on first contact after reboot. |
 
 ### Entity Resources
@@ -166,6 +185,18 @@ switch:
   - platform: gpio
     pin: GPIOXX
     name: "Relay"
+```
+
+### CoAP Server with CON Observe Mode
+
+Use CON observe when you want the protocol to confirm delivery of every notification. Ping is not used;
+`observe_retry` controls how many times the client re-establishes a broken observation.
+
+```yaml
+coap_server:
+  subscription_confirm: true
+  observe_retry: 2          # Re-subscribe up to 2 times before marking unavailable
+  max_connections: 2
 ```
 
 ### CoAP Server with OSCORE Security

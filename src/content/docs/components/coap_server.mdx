@@ -67,8 +67,10 @@ This option is only valid when `subscription_confirm` is `true`. Setting it when
 is a configuration error.
 
 - **observe_retry** (*Optional*, int): Number of times a client should re-establish a broken observation before
-  marking the device unavailable. Retries use exponential backoff starting at 10 s, capping at 5 min. Set to `0`
-  to disable retry. Range `0` to `10`. Defaults to `1`.
+  entering backoff reconnect. Retries use exponential backoff starting at 10 s, capping at 5 min. Once all retries
+  are exhausted the device is marked unavailable and the client enters an exponential backoff reconnect loop until
+  the device is reachable again. Set to `0` to skip retries and go directly to backoff reconnect on the first
+  stream failure. Range `0` to `10`. Defaults to `1`.
 
 ### Automation and security
 
@@ -197,12 +199,20 @@ switch:
 ### CoAP Server with CON Observe Mode
 
 Use CON observe when you want the protocol to confirm delivery of every notification. Ping is not used;
-`observe_retry` controls how many times the client re-establishes a broken observation.
+`observe_retry` controls how many times the client re-establishes a broken observation before entering
+backoff reconnect. mDNS re-announcements are ignored in CON mode.
+
+:::caution[Reboot detection requires regular updates]
+In CON mode the client detects a reboot only when a CON notification is sent and goes unacknowledged.
+Entities that rarely change (e.g. a switch held in one state) will not trigger detection. Always include
+at least one regularly-updating entity — such as an uptime sensor — so reboots are caught within one
+update cycle.
+:::
 
 ```yaml
 coap_server:
   subscription_confirm: true
-  observe_retry: 2          # Re-subscribe up to 2 times before marking unavailable
+  observe_retry: 2          # Re-subscribe up to 2 times, then enter backoff reconnect
   max_connections: 2
 ```
 

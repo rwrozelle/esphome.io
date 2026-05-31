@@ -80,7 +80,7 @@ is a configuration error.
 - **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except
   `/.well-known/core` and `/info`) must include valid OSCORE credentials.
 
-  - **master_secret** (**Required**, hex string): OSCORE Master Secret (non-empty hex, e.g. `"0102030405060708090a0b0c0d0e0f10"`).
+  - **master_secret** (**Required**, hex string): OSCORE Master Secret. Minimum 16 bytes (32 hex characters). Must be the same value on both the device and the client. Example: `"0102030405060708090a0b0c0d0e0f10"`.
   - **master_salt** (*Optional*, hex string): OSCORE Master Salt. Defaults to empty.
   - **sender_id** (**Required**, hex string): OSCORE Sender ID (non-empty hex, must differ from `recipient_id`).
   - **recipient_id** (**Required**, hex string): OSCORE Recipient ID (non-empty hex, must differ from `sender_id`).
@@ -164,6 +164,13 @@ Payloads use [CBOR](https://cbor.io/) map encoding with SenML keys: `2` = numeri
 
 To subscribe to state changes, send a GET with the CoAP Observe option set to `0`. To cancel, send a GET with
 Observe set to `1`.
+
+> [!NOTE]
+> CoAP notifications are sent over UDP, which is best-effort and connectionless. An individual notification may be
+> lost in transit — this is normal and by design. The next state change delivers the current value, so a missed
+> notification is self-healing. No intermediate states are buffered or retried on the device. This is a deliberate
+> trade-off: buffering would require heap allocation at runtime, which is avoided on embedded devices to prevent
+> memory fragmentation and to allow the device to enter light sleep between updates.
 
 ## Examples
 

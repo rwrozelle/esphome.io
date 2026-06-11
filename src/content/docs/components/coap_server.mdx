@@ -241,6 +241,60 @@ coap_server:
         args: ["client_address.c_str()"]
 ```
 
+## OSCORE Compliance Notes
+
+The current OSCORE implementation deviates from RFC 8613 in three ways. These are pragmatic workarounds
+required by OpenThread's CoAP routing architecture, not design choices. They are documented here so
+anyone deploying this component understands the limitations and can track resolution.
+
+### Violation 1 — URI-Path Sent in Plaintext
+
+**What the spec says:** URI-Path is a Class E option in RFC 8613 §4.1.3.3. It must appear only inside
+the encrypted inner message. The outer CoAP message should carry no URI-Path.
+
+**What we do:** URI-Path must be present on the outer (unencrypted) message so OpenThread can route the
+request to the correct resource handler before any application-level decryption occurs. Clients must
+copy the URI-Path back onto the outer protected message after OSCORE encrypt.
+
+**Security implication:** A network observer can see which resource path is being accessed (e.g.,
+`/fp/3/g/1`). Entity paths are opaque sequential indices, not descriptive names, so this leaks which
+entity is being targeted but not its type, name, or value. All payload content remains encrypted.
+
+**Resolution:** Requires a pre-dispatch hook in OpenThread's CoAP API so the server can receive all
+inbound packets before resource matching, decrypt, and re-dispatch by inner URI-Path. A feature request
+has been filed at [openthread/openthread#13234](https://github.com/openthread/openthread/issues/13234).
+
+### Violation 2 — FETCH Remapped to POST on Outer Message
+
+**What the spec says:** An OSCORE-protected CoAP Observe subscribe request should have an outer code of
+FETCH (RFC 8132, code 0.05). The inner message carries the actual GET with Observe option.
+
+**What we do:** OpenThread's `IsRequest()` only recognises codes GET through DELETE (0x01–0x04). A FETCH
+outer code is silently dropped before reaching any handler. Clients must use POST (0x02) as the outer
+code instead. The server detects the observe intent from the inner decrypted message.
+
+**Security implication:** None. This is a protocol conformance issue only.
+
+**Resolution:** Requires OpenThread to recognise FETCH as a valid request code. Tracked in
+[openthread/openthread#12838](https://github.com/openthread/openthread/issues/12838).
+Once that lands and the client is updated, the remap will be removed and the outer code will be FETCH
+as the spec requires.
+
+### Violation 3 — CON/NON Mode Detected from Outer Message Type
+
+**What the spec says:** The inner decrypted message carries the authoritative message type. Subscription
+mode (CON vs NON observe) should be determined from the inner type after decryption.
+
+**What we do:** The server reads the outer message type before decryption to determine whether the
+client is subscribing in CON or NON mode. Clients must set the correct CON/NON type on the outer
+protected message to match the `subscription_confirm` setting.
+
+**Security implication:** None. Message type is Class U (unprotected) in OSCORE — it is not encrypted
+in any case.
+
+**Resolution:** Follows from Violation 1. Once a pre-dispatch hook allows decrypt-before-route, the
+server can read the inner message type instead. No separate upstream change is required.
+
 ## See Also
 
 - [OpenThread Component](/components/openthread/)

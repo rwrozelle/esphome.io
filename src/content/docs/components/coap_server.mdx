@@ -31,7 +31,7 @@ coap_server:
 
 ## Configuration Variables
 
-- **id** (*Optional*, [ID](/guides/configuration-types#config-id)): Manually specify the ID used for code generation.
+- **id** (*Optional*, [ID](/guides/configuration-types/#config-id)): Manually specify the ID used for code generation.
 - **transport** (*Optional*, string): `openthread` or `network`. Defaults to `openthread` when the
   [OpenThread](/components/openthread/) component is configured, otherwise `network`.
 - **port** (*Optional*, int): UDP port the CoAP server listens on. Defaults to `5683`.
@@ -49,14 +49,14 @@ coap_server:
 These options are only valid when `subscription_confirm` is `false`. Setting any of them when
 `subscription_confirm: true` is a configuration error.
 
-- **server_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server expects
+- **server_ping_interval** (*Optional*, [Time](/guides/configuration-types/#config-time)): How often the server expects
   clients to ping it. This value is sent to clients in the `/info` response so they know the expected ping frequency.
   Minimum `20s`. Defaults to `60s`.
 - **server_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `server_ping_interval` to compute the
   server-side timeout for a client ping. Must be a positive value. Timeout has a floor of 1 second. Defaults to `2.5`.
 - **server_ping_retry** (*Optional*, int): Number of consecutive missed pings before a client connection is considered
   timed out. Range `1` to `5`. Defaults to `1`.
-- **client_ping_interval** (*Optional*, [Time](/guides/configuration-types#config-time)): How often the server sends
+- **client_ping_interval** (*Optional*, [Time](/guides/configuration-types/#config-time)): How often the server sends
   liveness pings to connected clients. Minimum `60s`. Defaults to `60s`.
 - **client_ping_timeout_ratio** (*Optional*, float): Multiplier applied to `client_ping_interval` to compute the
   timeout waiting for a client ping response. Must be a positive value. Timeout has a floor of 1 second. Defaults to `2.5`.
@@ -80,10 +80,10 @@ is a configuration error.
 
 ### Automation and security
 
-- **on_client_connected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
+- **on_client_connected** (*Optional*, [Action](/automations/actions/#all-actions)): Automation to run when a client
   establishes a connection. See [`on_client_connected` Trigger](#on_client_connected-trigger). Client tracking is IP
   only; the port is not used for tracking.
-- **on_client_disconnected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
+- **on_client_disconnected** (*Optional*, [Action](/automations/actions/#all-actions)): Automation to run when a client
   connection is closed. See [`on_client_disconnected` Trigger](#on_client_disconnected-trigger).
 - **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except
   `/.well-known/core`, `/info` and `/ping`) must include valid OSCORE credentials. Supported on ESP32 and on the

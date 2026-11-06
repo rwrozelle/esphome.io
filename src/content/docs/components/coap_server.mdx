@@ -1,13 +1,14 @@
 ---
 title: "CoAP Server"
-description: "Instructions for setting up the CoAP server component to expose ESPHome entities over a Thread network."
+description: "Instructions for setting up the CoAP server component to expose ESPHome entities over Thread or IP."
 ---
 
 import { Image } from 'astro:assets';
 import APIRef from '@components/APIRef.astro';
 
 The CoAP Server component exposes ESPHome entities (sensors, switches, binary sensors, buttons, text sensors, numbers,
-locks, and valves) as [CoAP](https://coap.technology/) resources over a [Thread](https://www.threadgroup.org) network.
+locks, and valves) as [CoAP](https://coap.technology/) resources over a [Thread](https://www.threadgroup.org) network
+or over the device's IP network (WiFi or Ethernet).
 Clients can read entity states, subscribe to state changes via CoAP Observe (RFC 7641), and send commands.
 Payloads use [CBOR](https://cbor.io/) encoding (SenML format, RFC 8428) for compact representation.
 
@@ -16,9 +17,12 @@ authenticate CoAP messages.
 
 <Image src="/images/coap_server.png" alt="CoAP Server" layout="constrained" />
 
-> [!NOTE]
-> This component requires an ESP32 with an IEEE 802.15.4 radio (ESP32-C5, ESP32-C6, or ESP32-H2) and the
-> [OpenThread](/components/openthread/) component.
+The server uses one transport, chosen with `transport`:
+
+- **openthread**: CoAP over Thread. Requires an ESP32 with an IEEE 802.15.4 radio (ESP32-C5, ESP32-C6, or
+  ESP32-H2) and the [OpenThread](/components/openthread/) component.
+- **network**: CoAP over UDP on the device's IP network, for example WiFi or Ethernet. It also runs on the
+  [host](/components/host/) platform. The socket component it needs is loaded automatically.
 
 ```yaml
 # Minimal configuration
@@ -28,6 +32,8 @@ coap_server:
 ## Configuration Variables
 
 - **id** (*Optional*, [ID](/guides/configuration-types#config-id)): Manually specify the ID used for code generation.
+- **transport** (*Optional*, string): `openthread` or `network`. Defaults to `openthread` when the
+  [OpenThread](/components/openthread/) component is configured, otherwise `network`.
 - **port** (*Optional*, int): UDP port the CoAP server listens on. Defaults to `5683`.
 - **max_connections** (*Optional*, int): Maximum number of simultaneous active client connections tracked for CoAP
   Observe. Range `1` to `5`. Defaults to `1`. Additional clients can still perform non-observe requests beyond this
@@ -80,7 +86,8 @@ is a configuration error.
 - **on_client_disconnected** (*Optional*, [Action](/automations/actions#all-actions)): Automation to run when a client
   connection is closed. See [`on_client_disconnected` Trigger](#on_client_disconnected-trigger).
 - **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except
-  `/.well-known/core` and `/info`) must include valid OSCORE credentials.
+  `/.well-known/core`, `/info` and `/ping`) must include valid OSCORE credentials. Supported on ESP32 and on the
+  [host](/components/host/) platform. See [OSCORE sequence number](#oscore-sequence-number).
 
   - **master_secret** (**Required**, hex string): OSCORE Master Secret. Minimum 16 bytes (32 hex characters). Must be the same value on both the device and the client. Example: `"0102030405060708090a0b0c0d0e0f10"`.
   - **master_salt** (*Optional*, hex string): OSCORE Master Salt. Defaults to empty.
@@ -95,7 +102,7 @@ is a configuration error.
 ### `on_client_connected` Trigger
 
 Activated each time a client establishes a connection. The variable `client_address` (`std::string`) contains the
-IPv6 address of the connecting client.
+IP address of the connecting client: IPv6 with the `openthread` transport, IPv6 or IPv4 with `network`.
 
 ```yaml
 coap_server:
@@ -110,7 +117,7 @@ coap_server:
 ### `on_client_disconnected` Trigger
 
 Activated each time a client connection is closed or timed out. The variable `client_address` (`std::string`)
-contains the IPv6 address of the disconnected client.
+contains the IP address of the disconnected client.
 
 ```yaml
 coap_server:
@@ -128,7 +135,7 @@ coap_server:
 |------|---------|---------------|-------------|
 | `/.well-known/core` | GET | Yes | Standard CoAP resource discovery (RFC 6690). Lists all entity resources. |
 | `/info` | GET | Yes | Device information: name, ESPHome version, build time, model, ping parameters, `subscription_confirm`, and `observe_retry`. |
-| `/ping` | GET | No | Liveness check. Returns `{2: uptime_seconds}` or `{2: -1}` on first contact after reboot. |
+| `/ping` | GET | Yes | Liveness check. Returns `{2: uptime_seconds}` or `{2: -1}` on first contact after reboot. |
 
 ### Entity Resources
 
@@ -216,6 +223,17 @@ coap_server:
   max_connections: 2
 ```
 
+### CoAP Server over WiFi
+
+```yaml
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+coap_server:
+  transport: network
+```
+
 ### CoAP Server with OSCORE Security
 
 ```yaml
@@ -241,6 +259,26 @@ coap_server:
         args: ["client_address.c_str()"]
 ```
 
+## OSCORE sequence number
+
+Every notification the device sends with OSCORE uses a new sender sequence number, which must never repeat
+under the same keys. Replies to a client's request reuse the request's number, so only notifications count.
+To survive reboots without a flash write per notification, the device stores a value 1024 numbers ahead and
+continues from it after a restart; numbers left unused are skipped. The value is written straight to storage,
+not through the [preferences](/components/esphome/#preferences-component) component, so it is saved even when
+the periodic preferences save is suspended:
+
+- **ESP32**: NVS, namespace `coap_oscore`, key `seq`.
+- **host**: the file `<name>.coap_oscore` in the folder set by the `ESPHOME_PREFDIR` environment variable,
+  or `~/.esphome/prefs` when it is not set.
+
+> [!WARNING]
+> Erasing this value while keeping the same OSCORE keys makes the device reuse sequence numbers and nonces.
+> Change `master_secret`, `master_salt` or `id_context` whenever the stored value is erased, for example after
+> erasing flash or deleting the file on host.
+
+If a save fails, the component shows a warning and retries on the next notification until a save succeeds.
+
 ## OSCORE Compliance Notes
 
 The current OSCORE implementation deviates from RFC 8613 in three ways. These are pragmatic workarounds
@@ -252,9 +290,10 @@ anyone deploying this component understands the limitations and can track resolu
 **What the spec says:** URI-Path is a Class E option in RFC 8613 §4.1.3.3. It must appear only inside
 the encrypted inner message. The outer CoAP message should carry no URI-Path.
 
-**What we do:** URI-Path must be present on the outer (unencrypted) message so OpenThread can route the
-request to the correct resource handler before any application-level decryption occurs. Clients must
-copy the URI-Path back onto the outer protected message after OSCORE encrypt.
+**What we do:** URI-Path must be present on the outer (unencrypted) message so the server can route the
+request to the correct resource handler before any application-level decryption occurs. OpenThread requires
+this, and the `network` transport routes the same way. Clients must copy the URI-Path back onto the outer
+protected message after OSCORE encrypt.
 
 **Security implication:** A network observer can see which resource path is being accessed (e.g.,
 `/fp/3/g/1`). Entity paths are opaque sequential indices, not descriptive names, so this leaks which

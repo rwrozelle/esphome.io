@@ -261,18 +261,18 @@ coap_server:
 Every notification the device sends with OSCORE uses a new sender sequence number, which must never repeat
 under the same keys. Replies to a client's request reuse the request's number, so only notifications count.
 To survive reboots without a flash write per notification, the device stores a value 1024 numbers ahead and
-continues from it after a restart; numbers left unused are skipped. The value is written straight to storage,
-not through the [preferences](/components/esphome/#preferences-component) component, so it is saved even when
-the periodic preferences save is suspended:
+continues from it after a restart; numbers left unused are skipped. The value is a preference that is written
+to storage as soon as it changes, without waiting for the periodic
+[preferences](/components/esphome/#preferences-component) save, so it is saved even when that save is suspended:
 
-- **ESP32**: NVS, namespace `coap_oscore`, key `seq`.
-- **host**: the file `<name>.coap_oscore` in the folder set by the `ESPHOME_PREFDIR` environment variable,
+- **ESP32**: NVS, with the other preferences.
+- **host**: the preferences file `<name>.prefs` in the folder set by the `ESPHOME_PREFDIR` environment variable,
   or `~/.esphome/prefs` when it is not set.
 
 > [!WARNING]
 > Erasing this value while keeping the same OSCORE keys makes the device reuse sequence numbers and nonces.
 > Change `master_secret`, `master_salt` or `id_context` whenever the stored value is erased, for example after
-> erasing flash or deleting the file on host.
+> erasing flash, a factory reset, or deleting the preferences file on host.
 
 If a save fails, the component shows a warning and retries on the next notification until a save succeeds.
 

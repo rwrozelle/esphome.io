@@ -20,7 +20,9 @@ authenticate CoAP messages.
 The server uses one transport, chosen by the configuration:
 
 - **OpenThread**: used when the [OpenThread](/components/openthread/) component is configured. CoAP over
-  Thread. Requires an ESP32 with an IEEE 802.15.4 radio (ESP32-C5, ESP32-C6, or ESP32-H2).
+  Thread. Requires an ESP32 with an IEEE 802.15.4 radio (ESP32-C5, ESP32-C6, or ESP32-H2) or an nRF52840. On
+  ESP32, coap_server turns on the OpenThread core option `OPENTHREAD_CONFIG_COAP_BLOCKWISE_TRANSFER_ENABLE` itself,
+  so it does not need to be in `core_options`, and setting it to `"0"` there is an error.
 - **Network**: used otherwise. CoAP over UDP on the device's IP network, for example WiFi or Ethernet. It also
   runs on the [host](/components/host/) platform. The socket component it needs is loaded automatically.
 
@@ -84,7 +86,7 @@ is a configuration error.
 - **on_client_disconnected** (*Optional*, [Action](/automations/actions/#all-actions)): Automation to run when a client
   connection is closed. See [`on_client_disconnected` Trigger](#on_client_disconnected-trigger).
 - **oscore** (*Optional*): OSCORE security configuration. When present, all client requests (except
-  `/.well-known/core`, `/info` and `/ping`) must include valid OSCORE credentials. Supported on ESP32 and on the
+  `/.well-known/core`, `/info` and `/ping`) must include valid OSCORE credentials. Supported on ESP32, nRF52 and on the
   [host](/components/host/) platform. See [OSCORE sequence number](#oscore-sequence-number).
 
   - **master_secret** (**Required**, hex string): OSCORE Master Secret. Minimum 16 bytes (32 hex characters). Must be the same value on both the device and the client. Example: `"0102030405060708090a0b0c0d0e0f10"`.
@@ -266,6 +268,7 @@ to storage as soon as it changes, without waiting for the periodic
 [preferences](/components/esphome/#preferences-component) save, so it is saved even when that save is suspended:
 
 - **ESP32**: NVS, with the other preferences.
+- **nRF52**: Zephyr settings, with the other preferences.
 - **host**: the preferences file `<name>.prefs` in the folder set by the `ESPHOME_PREFDIR` environment variable,
   or `~/.esphome/prefs` when it is not set.
 
